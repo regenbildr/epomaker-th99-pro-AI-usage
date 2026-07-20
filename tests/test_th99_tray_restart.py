@@ -71,6 +71,35 @@ class TrayRestartTests(unittest.TestCase):
             self.assertTrue(watchers[1].finished.wait(1))
             self._wait_until(lambda: not controller.is_running())
 
+    def test_provider_error_keeps_the_safe_detail_and_logs_it_once(self):
+        controller = TrayController()
+        controller._running = True
+        status = {"errors": {"claude": "RuntimeError: timed out"}}
+        with patch("builtins.print") as output:
+            controller._on_status(controller._run_token, status)
+            controller._on_status(controller._run_token, status)
+
+        self.assertEqual(controller._error, "claude: RuntimeError: timed out")
+        output.assert_called_once()
+        self.assertIn("claude: RuntimeError: timed out", output.call_args.args[0])
+
+    def test_reconnect_status_is_not_a_tray_error(self):
+        controller = TrayController()
+        controller._running = True
+        controller._on_status(
+            controller._run_token,
+            {
+                "values": (1, 2, None, 4),
+                "errors": {},
+                "uploaded": False,
+                "device_status": "disconnected",
+            },
+        )
+
+        self.assertIsNone(controller._error)
+        self.assertEqual(controller._device_status, "disconnected")
+        self.assertIn("disconnected", controller._state_text())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,6 +41,7 @@ from th99_clock_sync import sync_keyboard_clock
 RUNNING_COLOR = (46, 204, 113)  # green
 STOPPED_COLOR = (127, 140, 141)  # grey
 ERROR_COLOR = (231, 76, 60)  # red
+RECONNECTING_COLOR = (243, 156, 18)  # amber
 
 # Preset choices (seconds, label). Presets are the guardrail — a user can only
 # pick a sane value from the menu; load_config() clamps anything hand-edited.
@@ -180,6 +181,7 @@ class TrayController:
         self._run_token = 0
         self._values: tuple[int | None, ...] | None = None
         self._error: str | None = None
+        self._device_status: str | None = None
         self._clock_syncing = False
         self._clock_synced_at: str | None = None
         self.icon: pystray.Icon | None = None
@@ -198,6 +200,7 @@ class TrayController:
             stopping = self._stopping
             clock_syncing = self._clock_syncing
             clock_synced_at = self._clock_synced_at
+            device_status = self._device_status
         if error:
             return f"error ({error})"
         if stopping:
@@ -206,6 +209,10 @@ class TrayController:
             return "syncing keyboard clock..."
         if not running:
             return f"paused; clock synced {clock_synced_at}" if clock_synced_at else "paused"
+        if device_status == "disconnected":
+            return "keyboard disconnected; retrying automatically"
+        if device_status == "reconnecting":
+            return "keyboard reconnecting; retrying automatically"
         if values:
             c5, c7, x5, x7 = values
             status = f"Claude {_fmt(c5)}/{_fmt(c7)}, Codex {_fmt(x5)}/{_fmt(x7)}"
@@ -227,7 +234,12 @@ class TrayController:
         with self._lock:
             color = (
                 ERROR_COLOR if self._error
-                else (RUNNING_COLOR if self._running else STOPPED_COLOR)
+                else (
+                    RECONNECTING_COLOR
+                    if self._running
+                    and self._device_status in {"disconnected", "reconnecting"}
+                    else (RUNNING_COLOR if self._running else STOPPED_COLOR)
+                )
             )
         title = self._title()
         # Serialize icon writes: this runs from both the watcher thread and the
@@ -245,14 +257,28 @@ class TrayController:
 
     def _on_status(self, run_token: int, status: dict) -> None:
         """Apply status only from the current watcher run."""
+        error_to_log: str | None = None
         with self._lock:
             if run_token != self._run_token:
                 return
+            if "device_status" in status:
+                self._device_status = status["device_status"]
             if status.get("values") is not None:
                 self._values = status["values"]
                 self._error = None
             elif status.get("errors"):
-                self._error = "; ".join(status["errors"])
+                # collect_usage() supplies safe, token-free diagnostic strings.
+                detail = "; ".join(
+                    f"{name}: {message}" for name, message in status["errors"].items()
+                )
+                if detail != self._error:
+                    error_to_log = detail
+                self._error = detail
+        if error_to_log is not None:
+            # The tray menu can truncate a long message. Mirror a changed
+            # provider diagnostic to the launching terminal without logging
+            # credentials or request headers.
+            print(f"TH99 usage error: {error_to_log}", file=sys.stderr, flush=True)
         self._refresh()
 
     # --- settings -------------------------------------------------------
@@ -293,6 +319,7 @@ class TrayController:
             if self._running or (self._thread is not None and self._thread.is_alive()):
                 return
             self._error = None
+            self._device_status = None
             self._stopping = False
             self._run_token += 1
             run_token = self._run_token

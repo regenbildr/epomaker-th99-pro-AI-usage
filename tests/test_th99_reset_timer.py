@@ -87,6 +87,7 @@ class ResetTimerWatcherTests(unittest.TestCase):
             ) as reset_timers,
             patch("th99_live_usage.build_display_reports", return_value=(b"", b"", [])) as build,
             patch("th99_live_usage.write_preview") as preview,
+            patch("th99_live_usage.find_display_path", return_value="mi_03"),
             patch("th99_live_usage.upload_reports") as upload,
         ):
             watcher.run_cycle()

@@ -3,7 +3,10 @@
 Default mode creates a preview only. Live mode writes only to the confirmed
 TH99 Pro MI_03 TFT interface and requires an explicit acknowledgement phrase.
 Watch mode polls providers periodically, but uploads only when a displayed
-whole-number usage value or layout changes and the minimum write interval has elapsed.
+whole-number usage value or layout changes and the minimum write interval has
+elapsed. A detected USB disconnect is the narrow exception: the next confirmed
+reconnect gets one recovery upload because the keyboard returns to its native
+screen after power loss.
 
 The Watcher loop is shared by the CLI (``main``) and the tray app
 (``build_watcher``). Previews are written atomically (temp file + replace) so a
@@ -184,13 +187,26 @@ def validate_reference_capture(path: Path) -> None:
         raise ValueError("reviewed official upload does not regenerate exactly")
 
 
-def upload_reports(reports: list[bytes], timeout_ms: int) -> None:
+class TftDeviceUnavailable(RuntimeError):
+    """Expected temporary absence of the TH99 Pro MI_03 interface."""
+
+
+def find_display_path() -> str:
     candidates = th99_display_paths(enumerate_hid_paths())
+    if not candidates:
+        raise TftDeviceUnavailable("TH99 Pro MI_03 interface is not connected")
     if len(candidates) != 1:
         raise RuntimeError(
             f"expected exactly one TH99 Pro MI_03 interface, found {len(candidates)}"
         )
-    kernel32, handle = open_hid(candidates[0])
+    return candidates[0]
+
+
+def upload_reports(
+    reports: list[bytes], timeout_ms: int, *, path: str | None = None
+) -> None:
+    """Send one approved report set to a selected MI_03 interface."""
+    kernel32, handle = open_hid(path if path is not None else find_display_path())
     try:
         send_upload(kernel32, handle, reports, timeout_ms)
     finally:
@@ -246,6 +262,11 @@ class Watcher:
         self.on_status = on_status
         self._last_displayed: tuple[object, ...] | None = None
         self._last_upload_time = 0.0
+        # A successful upload describes only the current powered keyboard
+        # session. On a detected absence (or an I/O failure during reconnect),
+        # invalidate it so unchanged usage still restores the custom screen.
+        self._screen_state_unknown = False
+        self._last_recovery_attempt_time = 0.0
 
     def _log(self, message: str, *, error: bool = False) -> None:
         if self.verbose:
@@ -278,6 +299,32 @@ class Watcher:
             raise ValueError(f"unknown display mode: {display_mode}")
         self.display_mode = display_mode
 
+    def _mark_screen_state_unknown(self) -> None:
+        """Require one recovery upload after a keyboard reconnect."""
+        if not self._screen_state_unknown:
+            self._screen_state_unknown = True
+            self._last_recovery_attempt_time = 0.0
+
+    def _emit_device_unavailable(
+        self,
+        values: tuple[int | None, ...],
+        *,
+        status: str,
+        reason: Exception,
+        attempted_upload: bool = False,
+    ) -> None:
+        self._mark_screen_state_unknown()
+        if attempted_upload:
+            # A failed transfer may have delivered some reports before Windows
+            # noticed the disconnect. Keep retries inside the normal write
+            # interval rather than repeatedly sending a partial container.
+            self._last_recovery_attempt_time = time.monotonic()
+        self._log(
+            f"TH99 display {status}: {reason}; recovery will retry when eligible.",
+            error=True,
+        )
+        self._emit(values=values, errors={}, uploaded=False, device_status=status)
+
     def run_cycle(self) -> tuple[tuple[int | None, ...] | None, dict[str, str]]:
         """Run one poll/render/upload cycle. Returns (values, errors)."""
         providers, errors = collect_usage()
@@ -288,14 +335,41 @@ class Watcher:
             return None, errors
 
         values = values_from_providers(providers)
+        display_path: str | None = None
+        if self.execute_upload:
+            try:
+                display_path = find_display_path()
+            except TftDeviceUnavailable as error:
+                self._emit_device_unavailable(
+                    values, status="disconnected", reason=error
+                )
+                return values, {}
+            except OSError as error:
+                # SetupAPI can race Windows' HID teardown/re-enumeration. It is
+                # safe to retry, and no TFT packet was constructed or sent.
+                self._emit_device_unavailable(
+                    values, status="reconnecting", reason=error
+                )
+                return values, {}
+
         display_state = display_guard_tuple(values, self.display_mode)
-        changed = display_state != self._last_displayed
-        enough_time = time.monotonic() - self._last_upload_time >= self.min_upload_seconds
-        should_update_image = changed and (
-            not self.execute_upload
-            or self._last_displayed is None
-            or enough_time
+        changed = self._screen_state_unknown or display_state != self._last_displayed
+        now = time.monotonic()
+        enough_time = now - self._last_upload_time >= self.min_upload_seconds
+        recovery_due = self._screen_state_unknown and (
+            self._last_recovery_attempt_time == 0.0
+            or now - self._last_recovery_attempt_time >= self.min_upload_seconds
         )
+        if self.execute_upload and self._screen_state_unknown:
+            # Recovery-pending state takes priority over the normal "first
+            # upload" exception, so a failed transfer cannot retry every poll.
+            should_update_image = recovery_due
+        else:
+            should_update_image = changed and (
+                not self.execute_upload
+                or self._last_displayed is None
+                or enough_time
+            )
         if self.verbose:
             describe(providers)
 
@@ -329,13 +403,35 @@ class Watcher:
                 self._log("DRY RUN: no HID handle was opened and no report was sent.")
                 self._last_displayed = display_state
             else:
-                upload_reports(reports, self.timeout_ms)
+                try:
+                    upload_reports(reports, self.timeout_ms, path=display_path)
+                except (TftDeviceUnavailable, OSError, TimeoutError) as error:
+                    # A cable/dock reconnect may disappear after the preflight
+                    # enumeration. Do not turn that expected race into a fatal
+                    # watcher failure; no successful upload state is recorded.
+                    self._emit_device_unavailable(
+                        values,
+                        status="reconnecting",
+                        reason=error,
+                        attempted_upload=True,
+                    )
+                    return values, {}
                 self._last_displayed = display_state
                 self._last_upload_time = time.monotonic()
+                self._screen_state_unknown = False
+                self._last_recovery_attempt_time = 0.0
                 uploaded = True
                 self._log("TFT upload completed with 16/16 reports acknowledged.")
         elif not self.execute_upload:
             self._log("Preview unchanged; skipped render.")
+        elif self._screen_state_unknown:
+            remaining = round(
+                self.min_upload_seconds
+                - (time.monotonic() - self._last_recovery_attempt_time)
+            )
+            self._log(
+                f"TFT recovery pending; retrying in {max(0, remaining)} seconds."
+            )
         elif not changed:
             self._log("TFT unchanged; skipped upload.")
         else:
@@ -344,7 +440,16 @@ class Watcher:
             )
             self._log(f"Value changed; deferring upload for {max(0, remaining)} seconds.")
 
-        self._emit(values=values, errors={}, uploaded=uploaded)
+        self._emit(
+            values=values,
+            errors={},
+            uploaded=uploaded,
+            device_status=(
+                "reconnecting"
+                if self.execute_upload and self._screen_state_unknown
+                else ("connected" if self.execute_upload else "preview")
+            ),
+        )
         return values, errors
 
     def run_forever(self, stop_event: "threading.Event | None" = None) -> int:

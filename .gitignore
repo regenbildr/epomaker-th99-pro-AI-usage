@@ -19,3 +19,6 @@ assets/.*.new
 
 # Superseded local investigation artifacts (never publish)
 archive/
+
+# Personal implementation notes (never publish)
+docs/ROADMAP.md

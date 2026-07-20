@@ -22,7 +22,9 @@ The renderer is deterministic: identical inputs always produce identical pixels
 and the same SHA-256. In Reset Timer mode, the displayed time is the remaining
 time until reset and is formatted only after the layout/percentage guard permits a
 new image; only the selected layout and four whole usage percentages can request
-a screen write.
+a screen write. The one exception is a detected USB disconnect/reconnect: the
+watcher invalidates its in-memory screen state and sends one recovery upload
+when `MI_03` returns, because cold boot restores the native status screen.
 Provider tokens are only read from local credentialstores, sent only to their provider, and never printed, logged, or embedded in
 images.
 
@@ -92,6 +94,10 @@ trailer labels the commit but does not add the agent to the Contributors graph.
     `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value `TH99UsageTray`
     (no admin), launching via `pythonw` so there's no console window. The menu
     checkbox reflects the live registry state.
+  - The watcher polls for `MI_03` before live writes. A missing/re-enumerating
+    interface is amber (not fatal); once it returns, one recovery upload occurs.
+    Failed recovery transfers stay rate-limited by the selected write interval.
+    A brief unplug/replug entirely between provider polls cannot yet be seen.
 - `th99_live_usage.py` — **production utility/CLI** and the shared `Watcher`
   loop (used by both the CLI and the tray). Preview by default; live TFT upload
   is guarded by an acknowledgement phrase; `--watch` polls periodically. Renders

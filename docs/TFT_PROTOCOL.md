@@ -46,8 +46,14 @@ the uploaded usage image. This gives the user a safe way to leave the custom
 display without a factory reset. USB captures do not expose a display read-back
 or storage commit, so this observation does **not** prove whether the uploaded
 bytes remain in SPI flash; it only proves that the firmware does not restore the
-custom display mode at boot. Starting the watcher again uploads the current
-image for the new powered session.
+custom display mode at boot. The watcher checks for the wired `MI_03` interface
+on each provider poll: after it observes an absence, it uploads the current
+image once when the interface returns. That recovery upload intentionally
+overrides the usual minimum update interval, because the custom image is no
+longer on screen. A disconnect/reconnect entirely between polls cannot be
+observed yet; stopping and starting tracking requests a fresh upload. If a
+recovery transfer fails after opening the interface, later recovery attempts
+remain subject to the normal minimum update interval.
 
 ## Storage hardware and the flash-wear budget (why the update interval is limited)
 
@@ -55,6 +61,11 @@ The five-minute **screen-update interval floor** (the tray app's 5/10/15/30/60-
 minute presets, plus the "upload only when the value changed" rule) is a
 deliberate flash-endurance guardrail, sized from the keyboard's storage hardware.
 The default screen-update setting is 15 minutes.
+
+One narrow exception is intentional: after the running watcher detects a
+keyboard disconnect and then sees `MI_03` return, it sends one recovery upload
+even if the values are unchanged. Count that recovery upload conservatively as
+an additional screen write.
 
 - **Storage chip:** the keyboard contains a **Puya PY25Q128HA** (128 Mbit / 16
   MB) SPI flash, per an independent [teardown][teardown]. The host protocol

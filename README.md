@@ -66,7 +66,11 @@ PY25Q128HA's rated endurance of 100,000 program/erase cycles per erase block,
 treat each changed image conservatively as consuming one of roughly 100,000
 available screen writes. The app protects that budget by skipping unchanged
 display values and by limiting screen-update intervals to 5, 10, 15, 30, or 60
-minutes. The default screen-update limit is 15 minutes.
+minutes. The default screen-update limit is 15 minutes. A detected keyboard
+disconnect is a deliberate exception: because the keyboard returns to its
+native screen after power loss, the running watcher performs one recovery
+upload when its display interface returns, even if the usage values are
+unchanged and the usual interval has not elapsed.
 
 The **worst-case** column assumes every eligible interval produces a different
 image — effectively continuous usage. The second column is an **example**, not
@@ -137,6 +141,15 @@ decision. A new screen uploads only when:
    successfully uploaded state.
 2. The chosen screen-update interval has elapsed since the last upload.
 
+After a detected keyboard disconnect, the app deliberately invalidates that
+remembered state and performs one recovery upload once the wired `MI_03`
+interface returns. This restores the custom screen after a cold boot, but may
+consume one additional conservative flash-write budget entry. If that recovery
+transfer itself fails, later recovery attempts remain rate-limited by the chosen
+screen-update interval. The polling-based check can only observe a disconnect
+that lasts until a usage poll; if a very brief unplug/replug happens entirely
+between polls, stop and start tracking to request a fresh upload.
+
 The renderer is deterministic, so an identical layout and usage tuple produces
 identical pixels and the same upload payload. Frame and payload SHA-256 values
 are logged for verification, but the skip decision is the layout/tuple
@@ -156,8 +169,9 @@ flash lifetime; do not bypass the change-skip safeguard. See the full
 its native clock/status screen rather than automatically restoring the uploaded
 usage display. This is a convenient way to leave the custom display without a
 factory reset. It does not establish whether the uploaded bytes remain in flash;
-only that the firmware does not select that display mode after boot. Start
-tracking again to upload the current usage screen for the new powered session.
+only that the firmware does not select that display mode after boot. If the
+watcher observes the disconnect, it uploads the current usage screen once after
+the keyboard reconnects; otherwise, stop and start tracking to do so.
 
 ---
 
@@ -275,7 +289,8 @@ python src/th99_live_usage.py --execute-upload --acknowledge UPLOAD_LIVE_USAGE
 ```
 
 **4. Keep it updating automatically.** The easiest way is the **system-tray
-switch** — a small icon (green = running, grey = stopped). Right-click it to
+switch** — a small icon (green = running and keyboard available, amber =
+running while the keyboard reconnects, grey = stopped). Right-click it to
 Start/Stop, choose **Progress Bar** or **Reset Timer**, choose a one- or
 two-minute usage-check frequency (two minutes by default) and a minimum
 screen-update interval (15 minutes by default), toggle *Run at startup*,
