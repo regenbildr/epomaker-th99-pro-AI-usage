@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+
+# Runtime artifacts from the live watcher (regenerated each run)
+*.pid
+th99-live-usage-watcher.json
+th99-watcher-*.stdout.log
+th99-watcher-*.stderr.log
+
+# Transient "current" preview images overwritten atomically each poll
+*-current.bmp
+assets/.*.new
+
+# Credential refresh lock / temp files (should never live in the repo)
+.credentials.refresh.lock
+*.credentials.json
+*.tmp.*
+
+# Superseded local investigation artifacts (never publish)
+archive/
