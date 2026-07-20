@@ -234,7 +234,7 @@ personal tokens are never part of it.
 
 ---
 
-## Install
+## Windows Install
 
 From the repo root, in PowerShell:
 
