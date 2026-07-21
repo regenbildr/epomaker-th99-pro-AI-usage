@@ -1,4 +1,4 @@
-"""Deterministic TH99 TFT layouts for usage bars and reset timers."""
+"""Deterministic TH99 TFT layouts for remaining quota and reset timers."""
 
 from __future__ import annotations
 
@@ -56,6 +56,11 @@ def _validate_percent(percent: int | None) -> None:
     if percent is not None and not 0 <= percent <= 100:
         raise ValueError("percentage must be between 0 and 100 or None")
 
+
+def remaining_percent(used_percent: int | None) -> int | None:
+    """Convert a provider's normalized utilization into displayed capacity."""
+    _validate_percent(used_percent)
+    return None if used_percent is None else 100 - used_percent
 
 def _validate_values(values: tuple[int | None, ...]) -> None:
     if len(values) != 4:
@@ -146,21 +151,21 @@ def draw_progress_bar_row(
     *,
     y: int,
     label: str,
-    percent: int | None,
+    used_percent: int | None,
     color: tuple[int, int, int],
 ) -> None:
-    _validate_percent(percent)
+    remaining = remaining_percent(used_percent)
     height = 21
     text_y = y + 3
     canvas.text(ROW_LABEL_X, text_y, label, ROW_TEXT_SCALE, TEXT)
     canvas.rectangle(BAR_X, y, BAR_WIDTH, height, TRACK_BORDER)
     canvas.rectangle(BAR_X + 1, y + 1, BAR_WIDTH - 2, height - 2, TRACK)
 
-    if percent is not None:
-        fill = round((BAR_WIDTH - 4) * percent / 100)
+    if remaining is not None:
+        fill = round((BAR_WIDTH - 4) * remaining / 100)
         if fill:
             canvas.rectangle(BAR_X + 2, y + 2, fill, height - 4, color)
-    draw_percentage(canvas, x=VALUE_X, y=text_y, percent=percent, color=color)
+    draw_percentage(canvas, x=VALUE_X, y=text_y, percent=remaining, color=color)
 
 
 def draw_timer(
@@ -199,7 +204,7 @@ def draw_reset_timer_row(
     canvas: Canvas,
     *,
     y: int,
-    percent: int | None,
+    used_percent: int | None,
     reset_timer: str | None,
     show_days: bool,
     color: tuple[int, int, int],
@@ -216,7 +221,13 @@ def draw_reset_timer_row(
             show_days=show_days,
             color=TEXT,
         )
-    draw_percentage(canvas, x=RESET_VALUE_X, y=text_y, percent=percent, color=color)
+    draw_percentage(
+        canvas,
+        x=RESET_VALUE_X,
+        y=text_y,
+        percent=remaining_percent(used_percent),
+        color=color,
+    )
 
 
 def render_progress_pixels(values: tuple[int | None, ...]) -> list[tuple[int, int, int]]:
@@ -224,12 +235,12 @@ def render_progress_pixels(values: tuple[int | None, ...]) -> list[tuple[int, in
     claude_5h, claude_7d, codex_5h, codex_7d = values
     canvas = Canvas(WIDTH, HEIGHT, BACKGROUND)
     draw_text_rotated_minus_90(canvas, x=2, y=6, value="CLAUDE", color=CLAUDE)
-    draw_progress_bar_row(canvas, y=1, label="5H", percent=claude_5h, color=CLAUDE)
-    draw_progress_bar_row(canvas, y=25, label="7D", percent=claude_7d, color=CLAUDE)
+    draw_progress_bar_row(canvas, y=1, label="5H", used_percent=claude_5h, color=CLAUDE)
+    draw_progress_bar_row(canvas, y=25, label="7D", used_percent=claude_7d, color=CLAUDE)
     canvas.rectangle(1, 47, 158, 1, DIVIDER)
     draw_text_rotated_minus_90(canvas, x=2, y=57, value="CODEX", color=CODEX)
-    draw_progress_bar_row(canvas, y=50, label="5H", percent=codex_5h, color=CODEX)
-    draw_progress_bar_row(canvas, y=74, label="7D", percent=codex_7d, color=CODEX)
+    draw_progress_bar_row(canvas, y=50, label="5H", used_percent=codex_5h, color=CODEX)
+    draw_progress_bar_row(canvas, y=74, label="7D", used_percent=codex_7d, color=CODEX)
     return canvas.pixels
 
 
@@ -247,7 +258,7 @@ def render_reset_timer_pixels(
     draw_reset_timer_row(
         canvas,
         y=1,
-        percent=claude_5h,
+        used_percent=claude_5h,
         reset_timer=claude_5h_timer,
         show_days=False,
         color=CLAUDE,
@@ -255,7 +266,7 @@ def render_reset_timer_pixels(
     draw_reset_timer_row(
         canvas,
         y=25,
-        percent=claude_7d,
+        used_percent=claude_7d,
         reset_timer=claude_7d_timer,
         show_days=True,
         color=CLAUDE,
@@ -265,7 +276,7 @@ def render_reset_timer_pixels(
     draw_reset_timer_row(
         canvas,
         y=50,
-        percent=codex_5h,
+        used_percent=codex_5h,
         reset_timer=codex_5h_timer,
         show_days=False,
         color=CODEX,
@@ -273,7 +284,7 @@ def render_reset_timer_pixels(
     draw_reset_timer_row(
         canvas,
         y=74,
-        percent=codex_7d,
+        used_percent=codex_7d,
         reset_timer=codex_7d_timer,
         show_days=True,
         color=CODEX,

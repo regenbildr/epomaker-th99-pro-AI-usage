@@ -3,7 +3,7 @@
 Default mode creates a preview only. Live mode writes only to the confirmed
 TH99 Pro MI_03 TFT interface and requires an explicit acknowledgement phrase.
 Watch mode polls providers periodically, but uploads only when a displayed
-whole-number usage value or layout changes and the minimum write interval has
+normalized whole-number provider utilization value or layout changes and the minimum write interval has
 elapsed. A detected USB disconnect is the narrow exception: the next confirmed
 reconnect gets one recovery upload because the keyboard returns to its native
 screen after power loss.
@@ -152,7 +152,7 @@ def display_guard_tuple(
     values: tuple[int | None, int | None, int | None, int | None],
     display_mode: str,
 ) -> tuple[object, ...]:
-    """Write guard: layout plus four displayed whole usage percentages only."""
+    """Write guard: layout plus four normalized whole provider utilizations only."""
     if display_mode not in DISPLAY_MODES:
         raise ValueError(f"unknown display mode: {display_mode}")
     return (display_mode, *values)

@@ -163,8 +163,9 @@ def _make_image(color: tuple[int, int, int]) -> Image.Image:
     return image
 
 
-def _fmt(value: int | None) -> str:
-    return f"{value}%" if value is not None else "N/A"
+def _fmt(used_percent: int | None) -> str:
+    """Format normalized utilization as the capacity remaining to the user."""
+    return f"{100 - used_percent}%" if used_percent is not None else "N/A"
 
 
 class TrayController:

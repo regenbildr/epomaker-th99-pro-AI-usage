@@ -83,6 +83,16 @@ class TrayRestartTests(unittest.TestCase):
         output.assert_called_once()
         self.assertIn("claude: RuntimeError: timed out", output.call_args.args[0])
 
+    def test_tray_values_show_remaining_capacity(self):
+        controller = TrayController()
+        controller._running = True
+        controller._values = (38, 64, None, 51)
+
+        self.assertEqual(
+            controller._state_text(),
+            "Claude 62%/36%, Codex N/A/49%",
+        )
+
     def test_reconnect_status_is_not_a_tray_error(self):
         controller = TrayController()
         controller._running = True

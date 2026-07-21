@@ -5,15 +5,15 @@ first. Codex users: `AGENTS.md` points here.
 
 ## What this project does
 
-Shows **live Claude and Codex subscription usage** (5-hour and 7-day windows) on
+Shows **live Claude and Codex subscription capacity remaining** (5-hour and 7-day windows) on
 the TFT screen of an **Epomaker TH99 Pro** keyboard, using the keyboard's
 existing USB-HID protocol — **no firmware modification or reflashing**.
 
 Pipeline, once per poll:
 
 ```
-Read Claude + Codex usage percentages and reset timestamps
-      -> if layout or whole usage values changed and interval allows: render at 160x96
+Read Claude + Codex utilization percentages and reset timestamps
+      -> if layout or whole provider utilization values changed and interval allows: render at 160x96
       -> Reset Timer values are remaining time until the reported reset
       -> convert to RGB565, build two identical frames in the confirmed TFT container, upload 16 reports
 ```

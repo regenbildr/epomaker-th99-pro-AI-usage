@@ -1,20 +1,20 @@
 # TH99 Pro live usage display
 
-Show your **Claude and Codex subscription usage** — the 5-hour and 7-day
+Show your **Claude and Codex subscription capacity remaining** — the 5-hour and 7-day
 windows — right on the little TFT screen of an **Epomaker TH99 Pro** keyboard.
 
 It uses the keyboard's *existing* USB protocol, so there is **no firmware
 modification or reflashing**. It reads your usage on a schedule, draws a small
-status image, and uploads it only when the selected layout or displayed whole-number usage values change.
+status image, and uploads it only when the selected layout or normalized whole-number provider values change.
 
 <p align="center">
-  <img src="assets/th99-live-usage-fixed-bars-v8.png" width="150" alt="Progress Bar layout: Claude and Codex 5H/7D usage bars">
+  <img src="assets/th99-live-usage-fixed-bars-v8.png" width="150" alt="Progress Bar layout: Claude and Codex 5H/7D remaining-capacity bars">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/th99-reset-timer-mockup.png" width="150" alt="Reset Timer layout: Claude and Codex usage percentages and reset times">
+  <img src="assets/th99-reset-timer-mockup.png" width="150" alt="Reset Timer layout: Claude and Codex remaining-capacity percentages and reset times">
 </p>
 
-**Two layouts.** A **Progress Bar** view to visualize 5H/7D usage percentages. A **Reset
-Timer** view to show each available reset time as `0D 03H 09M` beside the same usage
+**Two layouts.** A **Progress Bar** view to visualize 5H/7D capacity remaining. A **Reset
+Timer** view to show each available reset time as `0D 03H 09M` beside the same remaining
 percentage; unavailable windows remain `N/A`.
 
 **Quota availability.** A row shows `N/A` when a provider successfully returns
@@ -122,11 +122,12 @@ coding, and other activity can still change a displayed value:
 
 ### How the change-skip guard works
 
-After each successful provider poll, the app normalizes the four displayed usage values into a tuple:
+After each successful provider poll, the app normalizes the four provider utilization values into a tuple:
 `(Claude 5H, Claude 7D, Codex 5H, Codex 7D)`. Each raw provider utilization is
-**rounded down** to the whole percentage shown on screen before entering that
-tuple; for example, 0.1% and 0.9% both remain 0%, and it becomes 1% only at
-1.0%. An unavailable window is `N/A`.
+**rounded down** before entering that tuple; for example, 0.1% and 0.9% both
+remain 0%, and it becomes 1% only at 1.0%. The display then renders the
+complement as capacity remaining (100%, 99%, and so on). An unavailable window is
+`N/A`.
 
 The screen-write guard is the selected layout plus that four-value tuple; timer
 countdown values are deliberately excluded. Including the countdown would make
@@ -178,14 +179,14 @@ the keyboard reconnects; otherwise, stop and start tracking to do so.
 ## How it works (30-second version)
 
 ```
-your usage %  ─►  draw a fixed 160×96 image  ─►  convert to the keyboard's
-(Claude+Codex)    (deterministic — same             screen format  ─►  upload
+provider utilization %  ─►  draw a fixed 160×96 image  ─►  convert to the keyboard's
+(Claude+Codex)    (shows capacity remaining;         screen format  ─►  upload
                    numbers ⇒ same pixels)            over USB (only if changed)
 ```
 
 The app checks the providers every one or two minutes (two minutes by default),
-then, only when the selected layout or one of its displayed whole-number usage
-percentages changes, programmatically generates this image and sends it
+then, only when the selected layout or one of its normalized whole-number provider
+utilization values changes, programmatically generates this image and sends it
 to the keyboard's TFT at a selected 5-, 10-, 15-, 30-, or 60-minute update
 interval (15 minutes by default). In Reset Timer view, the time in that image is
 the remaining time until reset; the countdown itself never triggers a TFT write

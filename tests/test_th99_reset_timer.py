@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from th99_four_bar_renderer import (
     DISPLAY_MODE_PROGRESS_BAR,
@@ -12,6 +12,8 @@ from th99_four_bar_renderer import (
     HEIGHT,
     WIDTH,
     render_pixels,
+    draw_progress_bar_row,
+    draw_reset_timer_row,
 )
 from provider_usage_probe import ProviderUsage, UsageWindow
 from th99_live_usage import Watcher, display_guard_tuple, format_reset_timer
@@ -49,6 +51,27 @@ class ResetTimerRendererTests(unittest.TestCase):
         progress_pixels = render_pixels(*values, display_mode=DISPLAY_MODE_PROGRESS_BAR)
         self.assertEqual(len(timer_pixels), WIDTH * HEIGHT)
         self.assertNotEqual(timer_pixels, progress_pixels)
+
+
+class RemainingCapacityRendererTests(unittest.TestCase):
+    def test_progress_and_timer_rows_display_capacity_remaining(self):
+        canvas = Mock()
+        with patch("th99_four_bar_renderer.draw_percentage") as progress_percentage:
+            draw_progress_bar_row(
+                canvas, y=1, label="5H", used_percent=38, color=(1, 2, 3)
+            )
+        self.assertEqual(progress_percentage.call_args.kwargs["percent"], 62)
+
+        with patch("th99_four_bar_renderer.draw_percentage") as timer_percentage:
+            draw_reset_timer_row(
+                canvas,
+                y=1,
+                used_percent=38,
+                reset_timer="0D 01H 47M",
+                show_days=False,
+                color=(1, 2, 3),
+            )
+        self.assertEqual(timer_percentage.call_args.kwargs["percent"], 62)
 
 
 class DisplayGuardTests(unittest.TestCase):

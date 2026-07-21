@@ -130,7 +130,7 @@ def draw_row(
     canvas: Canvas,
     *,
     y: int,
-    percent: int | None,
+    used_percent: int | None,
     reset_in: str,
     show_days: bool,
     color: tuple[int, int, int],
@@ -144,23 +144,29 @@ def draw_row(
         show_days=show_days,
         color=TEXT,
     )
-    if percent is None:
+    if used_percent is None:
         canvas.text(PERCENT_X, text_y, "N/A", ROW_TEXT_SCALE, MUTED)
     else:
-        draw_compact_percent(canvas, x=PERCENT_X, y=text_y, percent=percent, color=color)
+        draw_compact_percent(
+            canvas,
+            x=PERCENT_X,
+            y=text_y,
+            percent=100 - used_percent,
+            color=color,
+        )
 
 def render() -> list[tuple[int, int, int]]:
     canvas = Canvas(WIDTH, HEIGHT, BACKGROUND)
 
     draw_text_rotated_minus_90(canvas, x=2, y=6, value="CLAUDE", color=CLAUDE)
-    draw_row(canvas, y=1, percent=38, reset_in="0D 01H 47M", show_days=False, color=CLAUDE)
-    draw_row(canvas, y=25, percent=64, reset_in="4D 08H 09M", show_days=True, color=CLAUDE)
+    draw_row(canvas, y=1, used_percent=38, reset_in="0D 01H 47M", show_days=False, color=CLAUDE)
+    draw_row(canvas, y=25, used_percent=64, reset_in="4D 08H 09M", show_days=True, color=CLAUDE)
 
     canvas.rectangle(1, 47, 158, 1, DIVIDER)
 
     draw_text_rotated_minus_90(canvas, x=2, y=57, value="CODEX", color=CODEX)
-    draw_row(canvas, y=50, percent=80, reset_in="0D 02H 31M", show_days=False, color=CODEX)
-    draw_row(canvas, y=74, percent=51, reset_in="1D 08H 09M", show_days=True, color=CODEX)
+    draw_row(canvas, y=50, used_percent=80, reset_in="0D 02H 31M", show_days=False, color=CODEX)
+    draw_row(canvas, y=74, used_percent=51, reset_in="1D 08H 09M", show_days=True, color=CODEX)
     return canvas.pixels
 
 
